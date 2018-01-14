@@ -1,4 +1,4 @@
-# Rohitash Chandra, 2018 c.rohitash@gmail.com
+ # Rohitash Chandra, 2018 c.rohitash@gmail.com
 # rohitash-chandra.github.io
 
 # !/usr/bin/python
@@ -544,7 +544,7 @@ class BayesNN:  # Multi-Task leaning using Stocastic GD
 
 
         print naccept, ' num accepted'
-        accept_ratio = naccept / (samples * 1.0) * 100
+        accept_ratio = naccept / (samples * self.subtasks *1.0) * 100
 
 
         return (w_pos, posfx_train, posfx_test, posrmse_train, posrmse_test, pos_tau, x_train, x_test,  y_test, y_train, accept_ratio)
@@ -559,21 +559,30 @@ class BayesNN:  # Multi-Task leaning using Stocastic GD
 def main():
 
 
-    moduledecomp = [0.5 ,0.75,  1]  # decide what will be number of features for each group of taskdata correpond to module
 
-    for problem in range(2, 3):
+    moduledecomp = [3, 5, 7]  # decide what will be number of features for each group of taskdata correpond to module
 
-        hidden = 3
-        input = 4  #
+    for problem in range(1, 8):
+
+        path = str(problem) + 'res'
+        try:
+            os.makedirs(path)
+        except OSError:
+            if not os.path.isdir(path):
+                raise
+        outres = open(path + '/results.txt', 'w')
+
+        hidden = 5
+        input = 7  # max input
         output = 1
-        num_samples = 1000
+        num_samples = 8000 # 80 000 used in exp. note total num_samples is num_samples * num_subtasks
 
         if problem == 1:
-            traindata = np.loadtxt("Data_OneStepAhead/Lazer/train.txt")
-            testdata = np.loadtxt("Data_OneStepAhead/Lazer/test.txt")  #
+            traindata = np.loadtxt("Data_OneStepAhead/Lazer/train7.txt")
+            testdata = np.loadtxt("Data_OneStepAhead/Lazer/test7.txt")  #
         if problem == 2:
-            traindata = np.loadtxt("Data_OneStepAhead/Sunspot/train.txt")
-            testdata = np.loadtxt("Data_OneStepAhead/Sunspot/test.txt")  #
+            traindata = np.loadtxt("Data_OneStepAhead/Sunspot/train7.txt")
+            testdata = np.loadtxt("Data_OneStepAhead/Sunspot/test7.txt")  #
         if problem == 3:
             traindata = np.loadtxt("Data_OneStepAhead/Mackey/train7.txt")
             testdata = np.loadtxt("Data_OneStepAhead/Mackey/test7.txt")  #
@@ -595,46 +604,26 @@ def main():
 
         min_perf = 0.0000001  # stop when RMSE reches this point
 
-        numModules = 3 # first decide number of  modules (or ensembles for comparison)
+        subtasks = 3 #
 
         baseNet = [input, hidden, output]
 
-        inputfeatures = baseNet[0]  # total num inputfeatures for the prob
 
         mtaskNet = np.array([baseNet, baseNet, baseNet])
 
-        for i in xrange(1, numModules):
-            mtaskNet[i - 1][0] = moduledecomp[i - 1] * inputfeatures
+        for i in xrange(1, subtasks):
+            mtaskNet[i - 1][0] = moduledecomp[i - 1]
             mtaskNet[i][1] += (i * 2)  # in this example, we have fixed numner  output neurons. input for each task is termined by feature group size.
             # we adapt the number of hidden neurons for each task.
         print mtaskNet  # print network topology of all the modules that make the respective tasks. Note in this example, the tasks aredifferent network topologies given by hiddent number of hidden layers.
 
 
 
-        bayesnn = BayesNN(mtaskNet, traindata, testdata, num_samples, min_perf,   numModules)
+        bayesnn = BayesNN(mtaskNet, traindata, testdata, num_samples, min_perf,   subtasks)
 
 
 
         [w_pos, posfx_train, posfx_test, posrmse_train, posrmse_test, pos_tau, x_train, x_test, y_test, y_train, accept_ratio] = bayesnn.mcmc_sampler()
-
-        fx_train = posfx_train[:,0,:]
-        fx_test = posfx_test[:,0,:]
-
-        rmse_train = posrmse_train[:,0]
-        rmse_test = posrmse_test[:,0]
-
-
-
-        #print w_pos, ' w_pos'
-        #print posfx_test, ' fx test'
-        #print posrmse_test, ' posrmse test'
-        #print pos_tau, ' pos_tau'
-
-        #print fx_train, '  fx_train'
-
-
-
-        print accept_ratio
 
 
 
@@ -644,25 +633,89 @@ def main():
         burnin = 0.1 * num_samples  # use post burn in samples
 
 
-        fx_mu = fx_test.mean(axis=0)
-        fx_high = np.percentile(fx_test, 95, axis=0)
-        fx_low = np.percentile(fx_test, 5, axis=0)
 
-        fx_mu_tr = posfx_train[:,0,:].mean(axis=0)
-        fx_high_tr = np.percentile(posfx_train[:,0,:], 95, axis=0)
-        fx_low_tr = np.percentile(posfx_train[:,0,:], 5, axis=0)
 
-        rmse_tr = scipy.mean(rmse_train[int(burnin):])
-        rmsetr_std = np.std(rmse_train[int(burnin):])
-        rmse_tes = scipy.mean(rmse_test[int(burnin):])
-        rmsetest_std = np.std(rmse_test[int(burnin):])
+        rmsetr = np.zeros(subtasks)
+        rmsetr_std = np.zeros(subtasks)
+        rmsetes = np.zeros(subtasks)
+        rmsetes_std = np.zeros(subtasks)
 
-        print rmse_tr, rmsetr_std, rmse_tes, rmsetest_std
 
-        np.savetxt('results/results.txt', (rmse_tr, rmsetr_std, rmse_tes, rmsetest_std, accept_ratio), fmt='%1.5f')
 
-        #ytestdata = testdata[:, input]
-        #ytraindata = traindata[:, input]
+
+
+
+
+
+        print accept_ratio
+
+
+
+
+
+
+        for s in xrange(0, subtasks):
+            rmsetr[s] = scipy.mean(posrmse_train[int(burnin):,s])
+            rmsetr_std[s] = np.std(posrmse_train[int(burnin):,s])
+            rmsetes[s]= scipy.mean(posrmse_test[int(burnin):,s])
+            rmsetes_std[s] = np.std(posrmse_test[int(burnin):,s])
+
+
+
+        print rmsetr, rmsetr_std, rmsetes, rmsetes_std, 'subtask 1'
+
+
+
+        np.savetxt(outres, (problem, accept_ratio), fmt='%1.1f')
+        np.savetxt(outres, (rmsetr, rmsetr_std, rmsetes, rmsetes_std), fmt='%1.5f')
+
+
+
+        #next outputs  ------------------------------------------------------------
+
+
+
+
+        fx_mu = posfx_test[int(burnin):,0,:].mean(axis=0)
+        fx_high = np.percentile(posfx_test[int(burnin):,0,:], 95, axis=0)
+        fx_low = np.percentile(posfx_test[int(burnin):,0,:], 5, axis=0)
+
+        fx_mu_tr = posfx_train[int(burnin):,0,:].mean(axis=0)
+        fx_high_tr = np.percentile(posfx_train[int(burnin):,0,:], 95, axis=0)
+        fx_low_tr = np.percentile(posfx_train[int(burnin):,0,:], 5, axis=0)
+
+
+        fx_mu1 = posfx_test[int(burnin):,1,:].mean(axis=0)
+        fx_high1 = np.percentile(posfx_test[int(burnin):,1,:], 95, axis=0)
+        fx_low1 = np.percentile(posfx_test[int(burnin):,1,:], 5, axis=0)
+
+        fx_mu_tr1 = posfx_train[int(burnin):,1,:].mean(axis=0)
+        fx_high_tr1 = np.percentile(posfx_train[int(burnin):,1,:], 95, axis=0)
+        fx_low_tr1 = np.percentile(posfx_train[int(burnin):,1,:], 5, axis=0)
+
+        fx_mu2 = posfx_test[int(burnin):, 2, :].mean(axis=0)
+        fx_high2= np.percentile(posfx_test[int(burnin):, 2, :], 95, axis=0)
+        fx_low2 = np.percentile(posfx_test[int(burnin):, 2, :], 5, axis=0)
+
+        fx_mu_tr2 = posfx_train[int(burnin):, 2, :].mean(axis=0)
+        fx_high_tr2 = np.percentile(posfx_train[int(burnin):, 2, :], 95, axis=0)
+        fx_low_tr2 = np.percentile(posfx_train[int(burnin):, 2, :], 5, axis=0)
+
+
+        x2 = fx_high_tr2 - fx_low_tr2
+
+        print x2, '  diff x2'
+
+
+        x1 = fx_high_tr1 - fx_low_tr1
+
+        print x1, '  diff x1'
+
+
+
+        raw_input()
+
+        #subtask 1
 
         plt.plot(x_test, y_test, label='actual')
         plt.plot(x_test, fx_mu, label='pred. (mean)')
@@ -671,9 +724,9 @@ def main():
         plt.fill_between(x_test, fx_low, fx_high, facecolor='g', alpha=0.4)
         plt.legend(loc='upper right')
 
-        plt.title("Plot of Test Data vs MCMC Uncertainty ")
-        plt.savefig('results/mcmcrestest.png')
-        plt.savefig('results/mcmcrestest.svg', format='svg', dpi=600)
+        plt.title("Test data prediction performance and uncertainity")
+        plt.savefig(path + '/restest.png')
+        plt.savefig(path+ '/restest.svg', format='svg', dpi=600)
         plt.clf()
         # -----------------------------------------
         plt.plot(x_train, y_train, label='actual')
@@ -683,21 +736,66 @@ def main():
         plt.fill_between(x_train, fx_low_tr, fx_high_tr, facecolor='g', alpha=0.4)
         plt.legend(loc='upper right')
 
-        plt.title("Plot of Train Data vs MCMC Uncertainty ")
-        plt.savefig('results/mcmcrestrain.png')
-        plt.savefig('results/mcmcrestrain.svg', format='svg', dpi=600)
+        plt.title("Train data prediction performance and uncertainity ")
+        plt.savefig(path + '/restrain.png')
+        plt.savefig( path + '/restrain.svg', format='svg', dpi=600)
 
         plt.clf()
 
-        plt.hist(rmse_train, bins=np.linspace(0, 0.1, num=20))  # plt.hist passes it's arguments to np.histogram
-        plt.title("RMSE train")
-        plt.savefig('results/rmsetrain.png')
+        #subtask 2
+
+
+        plt.plot(x_test, y_test, label='actual')
+        plt.plot(x_test, fx_mu1, label='pred. (mean)')
+        plt.plot(x_test, fx_low1, label='pred.(5th percen.)')
+        plt.plot(x_test, fx_high1, label='pred.(95th percen.)')
+        plt.fill_between(x_test, fx_low1, fx_high1, facecolor='g', alpha=0.4)
+        plt.legend(loc='upper right')
+
+        plt.title("Test data prediction performance and uncertainity")
+        plt.savefig(path + '/restest1.png')
+        plt.savefig(path+ '/restest1.svg', format='svg', dpi=600)
+        plt.clf()
+        # ------------------------------1-----------
+        plt.plot(x_train, y_train, label='actual')
+        plt.plot(x_train, fx_mu_tr1, label='pred. (mean)')
+        plt.plot(x_train, fx_low_tr1, label='pred.(5th percen.)')
+        plt.plot(x_train, fx_high_tr1, label='pred.(95th percen.)')
+        plt.fill_between(x_train, fx_low_tr1, fx_high_tr1, facecolor='g', alpha=0.4)
+        plt.legend(loc='upper right')
+
+        plt.title("Train data prediction performance and uncertainity ")
+        plt.savefig(path + '/restrain1.png')
+        plt.savefig( path + '/restrain1.svg', format='svg', dpi=600)
 
         plt.clf()
 
-        plt.hist(rmse_train, bins=np.linspace(0, 0.1, num=20))  # plt.hist passes it's arguments to np.histogram
-        plt.title("RMSE train")
-        plt.savefig('results/rmsetest.png')
+        # subtask 3
+
+
+        plt.plot(x_test, y_test, label='actual')
+        plt.plot(x_test, fx_mu2, label='pred. (mean)')
+        plt.plot(x_test, fx_low2, label='pred.(5th percen.)')
+        plt.plot(x_test, fx_high2, label='pred.(95th percen.)')
+        plt.fill_between(x_test, fx_low2, fx_high2, facecolor='g', alpha=0.4)
+        plt.legend(loc='upper right')
+
+        plt.title("Test data prediction performance and uncertainity")
+        plt.savefig(path + '/restest2.png')
+        plt.savefig(path+ '/restest2.svg', format='svg', dpi=600)
+        plt.clf()
+        # ------------------------------1-----------
+        plt.plot(x_train, y_train, label='actual')
+        plt.plot(x_train, fx_mu_tr2, label='pred. (mean)')
+        plt.plot(x_train, fx_low_tr2, label='pred.(5th percen.)')
+        plt.plot(x_train, fx_high_tr2, label='pred.(95th percen.)')
+        plt.fill_between(x_train, fx_low_tr2, fx_high_tr2, facecolor='g', alpha=0.4)
+        plt.legend(loc='upper right')
+
+        plt.title("Train data prediction performance and uncertainity ")
+        plt.savefig(path + '/restrain2.png')
+        plt.savefig( path + '/restrain2.svg', format='svg', dpi=600)
+
         plt.clf()
 
 
